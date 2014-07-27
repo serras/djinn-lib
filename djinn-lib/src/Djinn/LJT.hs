@@ -17,14 +17,19 @@
 -- properly, taking account of first-argument indexing,
 -- and I learnt a trick or two from Neil Tennant's "Autologic" book.
 
-module Djinn. LJT (module LJTFormula, provable,
-            prove, Proof) where
+module Djinn.LJT (
+  module Djinn.LJTFormula,
+  provable,
+  prove,
+  Proof
+) where
 
+import Control.Applicative (Applicative, Alternative, pure, (<*>), empty, (<|>))
 import Control.Monad
 import Data.List (partition)
 import Debug.Trace
 
-import LJTFormula
+import Djinn.LJTFormula
 
 mtrace :: String -> a -> a
 mtrace m x = if debug then trace m x else x
@@ -34,10 +39,11 @@ mtrace m x = if debug then trace m x else x
 --                     mtrace (fun ++ " returns: " ++ o) ret
 wrapM :: (Show a, Show b, Monad m) => String -> a -> m b -> m b
 wrapM fun args mret = do
-    () <- mtrace (fun ++ ": " ++ show args) $ return ()
-    ret <- mret
-    () <- mtrace (fun ++ " returns: " ++ show ret) $ return ()
-    return ret
+  () <- mtrace (fun ++ ": " ++ show args) $ return ()
+  ret <- mret
+  () <- mtrace (fun ++ " returns: " ++ show ret) $ return ()
+  return ret
+
 debug :: Bool
 debug = False
 
@@ -51,12 +57,11 @@ prove more env a = runP $ redtop more env a
 
 redtop :: MoreSolutions -> [(Symbol, Formula)] -> Formula -> P Proof
 redtop more ifs a = do
-    let form = foldr (:->) a (map snd ifs)
-    p <- redant more [] [] [] [] form
-    nf (foldl Apply p (map (Var . fst) ifs))
+  let form = foldr (:->) a (map snd ifs)
+  p <- redant more [] [] [] [] form
+  nf (foldl Apply p (map (Var . fst) ifs))
 
 ------------------------------
------
 type Proof = Term
 
 subst :: Term -> Symbol -> Term -> P Term
@@ -67,12 +72,12 @@ subst b x term = sub term
         sub t = return t
 
 copy :: [(Symbol, Symbol)] -> Term -> P Term
-copy r (Var s) = return $ Var $ maybe s id $ lookup s r
-copy r (Lam s t) = do
+copy r (Var s)       = return $ Var $ maybe s id $ lookup s r
+copy r (Lam s t)     = do
     s' <- newSym "c"
     liftM (Lam s') $ copy ((s, s'):r) t
 copy r (Apply t1 t2) = liftM2 Apply (copy r t1) (copy r t2)
-copy _r t = return t
+copy _r t            = return t
 
 ------------------------------
 
@@ -100,13 +105,13 @@ applyImp p q = Apply p (Apply q (Lam y $ Apply p (Lam x (Var y))))
 -- replace p1 and p2 with the components of the pair
 cImpDImpFalse :: Symbol -> Symbol -> Term -> Term -> P Term
 cImpDImpFalse p1 p2 cdf gp = do
-    let p1b = Lam cf $ Apply cdf $ Lam x $ Apply (Ccases []) $ Apply (Var cf) (Var x)
-        p2b = Lam d $ Apply cdf $ Lam c $ Var d
-        cf = Symbol "cf"
-        x = Symbol "x"
-        d = Symbol "d"
-        c = Symbol "c"
-    subst p1b p1 gp >>= subst p2b p2
+  let p1b = Lam cf $ Apply cdf $ Lam x $ Apply (Ccases []) $ Apply (Var cf) (Var x)
+      p2b = Lam d $ Apply cdf $ Lam c $ Var d
+      cf = Symbol "cf"
+      x = Symbol "x"
+      d = Symbol "d"
+      c = Symbol "c"
+  subst p1b p1 gp >>= subst p2b p2
 
 ------------------------------
 
@@ -117,17 +122,17 @@ cImpDImpFalse p1 p2 cdf gp = do
 -- Compute the normal form
 nf :: Term -> P Term
 nf ee = spine ee []
-  where spine (Apply f a) as = do a' <- nf a; spine f (a' : as)
-        spine (Lam s e) [] = liftM (Lam s) (nf e)
+  where spine (Apply f a) as     = do a' <- nf a; spine f (a' : as)
+        spine (Lam s e) []       = liftM (Lam s) (nf e)
         spine (Lam s e) (a : as) = do e' <- subst a s e; spine e' as
         spine (Csplit n) (b : tup : args) | istup && n <= length xs = spine (applys b xs) args
           where (istup, xs) = getTup tup
-                getTup (Ctuple _) = (True, [])
+                getTup (Ctuple _)  = (True, [])
                 getTup (Apply f a) = let (tf, as) = getTup f in (tf, a:as)
                 getTup _ = (False, [])
         spine (Ccases []) (e@(Apply (Ccases []) _) : as) = spine e as
         spine (Ccases cds) (Apply (Cinj _ i) x : as) | length as >= n = spine (Apply (as!!i) x) (drop n as)
-                where n = length cds
+          where n = length cds
         spine f as = return $ applys f as
 
 
@@ -138,21 +143,28 @@ nf ee = spine ee []
 -- results.  But this is much better for backtracking.
 newtype P a = P { unP :: PS -> [(PS, a)] }
 
+instance Applicative P where
+  pure  = return
+  (<*>) = ap
+
 instance Monad P where
-    return x = P $ \ s -> [(s, x)]
-    P m >>= f = P $ \ s ->
-        [ y | (s',x) <- m s, y <- unP (f x) s' ]
+  return x  = P $ \ s -> [(s, x)]
+  P m >>= f = P $ \ s -> [ y | (s',x) <- m s, y <- unP (f x) s' ]
 
 instance Functor P where
-    fmap f (P m) = P $ \ s ->
-        [ (s', f x) | (s', x) <- m s ]
+  fmap f (P m) = P $ \ s -> [ (s', f x) | (s', x) <- m s ]
+
+instance Alternative P where
+  empty = mzero
+  (<|>) = mplus
 
 instance MonadPlus P where
-    mzero = P $ \ _s -> []
-    P fxs `mplus` P fys = P $ \ s -> fxs s ++ fys s
+  mzero = P $ \ _s -> []
+  P fxs `mplus` P fys = P $ \ s -> fxs s ++ fys s
 
 -- The state, just an integer for generating new variables
 data PS = PS !Integer
+
 startPS :: PS
 startPS = PS 1
 
@@ -174,10 +186,12 @@ runP (P m) = map snd (m startPS)
 
 ------------------------------
 ----- Atomic formulae
+
 data AtomF = AtomF Term Symbol
-    deriving (Eq)
+           deriving (Eq)
+
 instance Show AtomF where
-    show (AtomF p s) = show p ++ ":" ++ show s
+  show (AtomF p s) = show p ++ ":" ++ show s
 
 type AtomFs = [AtomF]
 
@@ -199,7 +213,7 @@ type AtomImps = [AtomImp]
 
 extract :: AtomImps -> Symbol -> ([Antecedent], AtomImps)
 extract aatomImps@(atomImp@(AtomImp a' bs) : atomImps) a =
-    case compare a a' of
+  case compare a a' of
     GT -> let (rbs, restImps) = extract atomImps a in (rbs, atomImp : restImps)
     EQ -> (bs, atomImps)
     LT -> ([], aatomImps)
@@ -208,7 +222,7 @@ extract _ _ = ([], [])
 insert :: AtomImps -> AtomImp -> AtomImps
 insert [] ai = [ ai ]
 insert aatomImps@(atomImp@(AtomImp a' bs') : atomImps) ai@(AtomImp a bs) =
-    case compare a a' of
+  case compare a a' of
     GT -> atomImp : insert atomImps ai
     EQ -> AtomImp a (bs ++ bs') : atomImps
     LT -> ai : aatomImps
@@ -217,9 +231,10 @@ insert aatomImps@(atomImp@(AtomImp a' bs') : atomImps) ai@(AtomImp a bs) =
 ----- Nested implications, (a -> b) -> c
 
 data NestImp = NestImp Term Formula Formula Formula -- NestImp a b c represents (a :-> b) :-> c
-    deriving (Eq)
+             deriving (Eq)
+
 instance Show NestImp where
-    show (NestImp _ a b c) = show $ (a :-> b) :-> c
+  show (NestImp _ a b c) = show $ (a :-> b) :-> c
 
 type NestImps = [NestImp]
 
@@ -233,26 +248,24 @@ heuristics = True
 
 order :: NestImps -> Formula -> AtomImps -> NestImps
 order nestImps g atomImps =
-    if heuristics then
-        nestImps
-    else
-        let
-            good_for (NestImp _ _ _ (Disj [])) = True
-            good_for (NestImp _ _ _ g') = g == g'
-            nice_for (NestImp _ _ _ (PVar s)) =
+  if heuristics
+     then nestImps
+     else let good_for (NestImp _ _ _ (Disj [])) = True
+              good_for (NestImp _ _ _ g')        = g == g'
+              nice_for (NestImp _ _ _ (PVar s)) =
                 case extract atomImps s of
-                (bs', _) -> let bs = [ b | A _ b <- bs'] in g `elem` bs || false `elem` bs
-            nice_for _ = False
-            (good, ok) = partition good_for nestImps
-            (nice, bad) = partition nice_for ok
-        in  good ++ nice ++ bad
+                  (bs', _) -> let bs = [ b | A _ b <- bs'] in g `elem` bs || false `elem` bs
+              nice_for _ = False
+              (good, ok) = partition good_for nestImps
+              (nice, bad) = partition nice_for ok
+           in good ++ nice ++ bad
 
 ------------------------------
 ----- Generate a new unique variable
 newSym :: String -> P Symbol
 newSym pre = do
-   i <- nextInt
-   return $ Symbol $ pre ++ show i
+  i <- nextInt
+  return $ Symbol $ pre ++ show i
 
 ------------------------------
 ----- Generate all ways to select one element of a list
@@ -289,49 +302,43 @@ type Goal = Formula
 --
 redant :: MoreSolutions -> Antecedents -> AtomImps -> NestImps -> AtomFs -> Goal -> P Proof
 redant more antes atomImps nestImps atoms goal =
-    wrapM "redant" (antes, atomImps, nestImps, atoms, goal) $
+  wrapM "redant" (antes, atomImps, nestImps, atoms, goal) $
     case antes of
-    [] -> redsucc goal
-    a:l -> redant1 a l goal
+      [] -> redsucc goal
+      a:l -> redant1 a l goal
   where redant0 l g = redant more l atomImps nestImps atoms g
         redant1 :: Antecedent -> Antecedents -> Goal -> P Proof
         redant1 a@(A p f) l g =
-            wrapM "redant1" ((a, l), atomImps, nestImps, atoms, g) $
-            if f == g then
-                -- The goal is the antecedent, we're done.
-                -- XXX But we might want more?
-                if more then
-                    return p `mplus` redant1' a l g
-                else
-                    return p
-            else
-                redant1' a l g
+          wrapM "redant1" ((a, l), atomImps, nestImps, atoms, g) $
+          if f == g
+             then -- The goal is the antecedent, we're done.
+               if more
+                  then return p `mplus` redant1' a l g
+                  else return p
+             else redant1' a l g
 
         -- Reduce the first antecedent
         redant1' :: Antecedent -> Antecedents -> Goal -> P Proof
         redant1' (A p (PVar s)) l g =
-           let af = AtomF p s
-               (bs, restAtomImps) = extract atomImps s
-           in  redant more ([A (Apply f p) b | A f b <- bs] ++ l) restAtomImps nestImps (addAtom af atoms) g
+          let af = AtomF p s
+              (bs, restAtomImps) = extract atomImps s
+           in redant more ([A (Apply f p) b | A f b <- bs] ++ l) restAtomImps nestImps (addAtom af atoms) g
         redant1' (A p (Conj bs)) l g = do
-           vs <- mapM (const (newSym "v")) bs
-           gp <- redant0 (zipWith (\ v a -> A (Var v) a) vs bs ++ l) g
-           return $ applys (Csplit (length bs)) [foldr Lam gp vs, p]
+          vs <- mapM (const (newSym "v")) bs
+          gp <- redant0 (zipWith (\ v a -> A (Var v) a) vs bs ++ l) g
+          return $ applys (Csplit (length bs)) [foldr Lam gp vs, p]
         redant1' (A p (Disj ds)) l g = do
-           vs <- mapM (const (newSym "d")) ds
-           ps <- mapM (\ (v, (_, d)) -> redant1 (A (Var v) d) l g) (zip vs ds)
-           if null ds && g == Disj [] then
-               -- We are about to construct `void p : Void', so we shortcut
-               -- it with just `p'.
-               return p
-            else
-               return $ applys (Ccases (map fst ds)) (p : zipWith Lam vs ps)
+          vs <- mapM (const (newSym "d")) ds
+          ps <- mapM (\ (v, (_, d)) -> redant1 (A (Var v) d) l g) (zip vs ds)
+          if null ds && g == Disj []
+             then return p
+             else return $ applys (Ccases (map fst ds)) (p : zipWith Lam vs ps)
         redant1' (A p (a :-> b)) l g = redantimp p a b l g
 
         redantimp :: Term -> Formula -> Formula -> Antecedents -> Goal -> P Proof
         redantimp t c d a g =
-            wrapM "redantimp" (c,d,a,g) $
-            redantimp' t c d a g
+          wrapM "redantimp" (c,d,a,g) $
+          redantimp' t c d a g
 
         -- Reduce an implication antecedent
         redantimp' :: Term -> Formula -> Formula -> Antecedents -> Goal -> P Proof
@@ -339,112 +346,96 @@ redant more antes atomImps nestImps atoms goal =
         redantimp' p (PVar s) b l g = redantimpatom p s b l g
         -- p : (c & d) -> b
         redantimp' p (Conj cs) b l g = do
-            x <- newSym "x"
-            let imp = foldr (:->) b cs
-            gp <- redant1 (A (Var x) imp) l g
-            subst (curryt (length cs) p) x gp
+          x <- newSym "x"
+          let imp = foldr (:->) b cs
+          gp <- redant1 (A (Var x) imp) l g
+          subst (curryt (length cs) p) x gp
         -- p : (c | d) -> b
         redantimp' p (Disj ds) b l g = do
-            vs <- mapM (const (newSym "d")) ds
-            gp <- redant0 (zipWith (\ v (_, d) -> A (Var v) (d :-> b)) vs ds ++ l) g
-            foldM (\ r (i, v, (cd, _)) -> subst (inj cd i p) v r) gp (zip3 [0..] vs ds)
+          vs <- mapM (const (newSym "d")) ds
+          gp <- redant0 (zipWith (\ v (_, d) -> A (Var v) (d :-> b)) vs ds ++ l) g
+          foldM (\ r (i, v, (cd, _)) -> subst (inj cd i p) v r) gp (zip3 [0..] vs ds)
         -- p : (c -> d) -> b
         redantimp' p (c :-> d) b l g = redantimpimp p c d b l g
 
         redantimpimp :: Term -> Formula -> Formula -> Formula -> Antecedents -> Goal -> P Proof
         redantimpimp f b c d a g =
-            wrapM "redantimpimp" (b,c,d,a,g) $
-            redantimpimp' f b c d a g
+          wrapM "redantimpimp" (b,c,d,a,g) $
+          redantimpimp' f b c d a g
 
         -- Reduce a double implication antecedent
         redantimpimp' :: Term -> Formula -> Formula -> Formula -> Antecedents -> Goal -> P Proof
         -- next clause exploits ~(C->D) <=> (~~C & ~D)
         -- which isn't helpful when D = false
         redantimpimp' p c d (Disj []) l g | d /= false = do
-            x <- newSym "x"
-            y <- newSym "y"
-            gp <- redantimpimp (Var x) c false false (A (Var y) (d :-> false) : l) g
-            cImpDImpFalse x y p gp
+          x <- newSym "x"
+          y <- newSym "y"
+          gp <- redantimpimp (Var x) c false false (A (Var y) (d :-> false) : l) g
+          cImpDImpFalse x y p gp
         -- p : (c -> d) -> b
         redantimpimp' p c d b l g = redant more l atomImps (addNestImp (NestImp p c d b) nestImps) atoms g
 
         -- Reduce an atomic implication
         redantimpatom :: Term -> Symbol -> Formula -> Antecedents -> Goal -> P Proof
         redantimpatom p s b l g =
-            wrapM "redantimpatom" (s,b,l,g) $
-            redantimpatom' p s b l g
+          wrapM "redantimpatom" (s,b,l,g) $
+          redantimpatom' p s b l g
 
         redantimpatom' :: Term -> Symbol -> Formula -> Antecedents -> Goal -> P Proof
         redantimpatom' p s b l g =
-          do
-            a <- cutSearch more $ many (findAtoms s atoms)
-            x <- newSym "x"
-            gp <- redant1 (A (Var x) b) l g
-            mtrace "redantimpatom: LLL" $
-             subst (applyAtom p a) x gp
+          do a <- cutSearch more $ many (findAtoms s atoms)
+             x <- newSym "x"
+             gp <- redant1 (A (Var x) b) l g
+             mtrace "redantimpatom: LLL" $ subst (applyAtom p a) x gp
           `mplus`
-            (mtrace "redantimpatom: RRR" $
-             redant more l (insert atomImps (AtomImp s [A p b])) nestImps atoms g)
-{-
-            let ps = wrap "redantimpatom findAtoms" atoms $ findAtoms s atoms
-            in  if not (null ps) then do
-                    a <- cutSearch more $ many ps
-                    x <- newSym "x"
-                    gp <- redant1 (A (Var x) b) l g
-                    mtrace "redantimpatom: LLL" $
-                     subst (applyAtom p a) x gp
-                else
-                    mtrace "redantimpatom: RRR" $
-                     redant more l (insert atomImps (AtomImp s [A p b])) nestImps atoms g
--}
+             (mtrace "redantimpatom: RRR" $
+               redant more l (insert atomImps (AtomImp s [A p b])) nestImps atoms g)
+
         -- Reduce the goal, with all antecedents already being classified
         redsucc :: Goal -> P Proof
         redsucc g =
-            wrapM "redsucc" (g, atomImps, nestImps, atoms) $
-            redsucc' g
+          wrapM "redsucc" (g, atomImps, nestImps, atoms) $
+          redsucc' g
 
         redsucc' :: Goal -> P Proof
         redsucc' a@(PVar s) =
             (cutSearch more $ many (findAtoms s atoms))
           `mplus`
             -- The posin check is an optimization.  It gets a little slower without the test.
-            (if posin s atomImps nestImps then
-                redsucc_choice a
-            else
-                none)
+            (if posin s atomImps nestImps then redsucc_choice a else none)
         redsucc' (Conj cs) = do
-            ps <- mapM redsucc cs
-            return $ applys (Ctuple (length cs)) ps
+          ps <- mapM redsucc cs
+          return $ applys (Ctuple (length cs)) ps
         -- next clause deals with succedent (A v B) by pushing the
         -- non-determinism into the treatment of implication on the left
         redsucc' (Disj ds) = do
-            s1 <- newSym "_"
-            let v = PVar s1
-            redant0 [ A (Cinj cd i) $ d :-> v | (i, (cd, d)) <- zip [0..] ds ] v
+          s1 <- newSym "_"
+          let v = PVar s1
+          redant0 [ A (Cinj cd i) $ d :-> v | (i, (cd, d)) <- zip [0..] ds ] v
         redsucc' (a :-> b) = do
-            s <- newSym "x"
-            p <- redant1 (A (Var s) a) [] b
-            return $ Lam s p
+          s <- newSym "x"
+          p <- redant1 (A (Var s) a) [] b
+          return $ Lam s p
 
         -- Now we have the hard part; maybe lots of formulae
         -- of form (C->D)->B  in nestImps to choose from!
         -- Which one to take first? We use the order heuristic.
         redsucc_choice :: Goal -> P Proof
         redsucc_choice g =
-            wrapM "redsucc_choice" g $
-            redsucc_choice' g
+          wrapM "redsucc_choice" g $
+          redsucc_choice' g
 
         redsucc_choice' :: Goal -> P Proof
         redsucc_choice' g = do
-            let ordImps = order nestImps g atomImps
-            (NestImp p c d b, restImps) <-
-                mtrace ("redsucc_choice: order=" ++ show ordImps) $
-                select ordImps
-            x <- newSym "x"
-            z <- newSym "z"
-            qz <- redant more [A (Var z) $ d :-> b] atomImps restImps atoms (c :-> d)
-            gp <- redant more [A (Var x) b] atomImps restImps atoms g
-            subst (applyImp p (Lam z qz)) x gp
+          let ordImps = order nestImps g atomImps
+          (NestImp p c d b, restImps) <-
+              mtrace ("redsucc_choice: order=" ++ show ordImps) $
+              select ordImps
+          x <- newSym "x"
+          z <- newSym "z"
+          qz <- redant more [A (Var z) $ d :-> b] atomImps restImps atoms (c :-> d)
+          gp <- redant more [A (Var x) b] atomImps restImps atoms g
+          subst (applyImp p (Lam z qz)) x gp
 
 posin :: Symbol -> AtomImps -> NestImps -> Bool
 posin g atomImps nestImps = posin1 g atomImps || posin2 g [ (a :-> b) :-> c | NestImp _ a b c <- nestImps ]
