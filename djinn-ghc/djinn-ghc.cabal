@@ -13,7 +13,10 @@ build-type:     Simple
 cabal-version:  >=1.8
 
 library
-  -- exposed-modules:  
+  exposed-modules:  Djinn.GHC
   build-depends:    base >= 4 && < 5,
-                    ghc
+                    mtl < 2.2,
+                    ghc,
+                    containers,
+                    djinn-lib
   hs-source-dirs:   src
