@@ -36,7 +36,7 @@ hType t | Just (c, ts) <- G.splitTyConApp_maybe t =
   where createHTApp n []     = D.HTCon n
         createHTApp n (x:xs) = D.HTApp (createHTApp n xs) x
 hType t | Just (t1,t2) <- G.splitAppTy_maybe t    = D.HTApp (hType t1) (hType t2)
-hType t | Just var <- G.getTyVar_maybe t          = D.HTVar (G.getOccString var)
+hType t | Just var <- G.getTyVar_maybe t          = D.HTVar (toHSymbol var)
 hType _                                           = error "Unimplemented"
 
 environment :: G.GhcMonad m => G.Type -> m HEnvironment
@@ -67,7 +67,7 @@ environment1 name = do
       -- Recursively obtain it for the environment of the type
       defnEnv <- environment defn
       return $ (tyconName, (varsH, htype, NoExtraInfo)) : defnEnv
-    _ -> fail "Unexpected element"
+    _ -> return []
 
 toHSymbol :: G.NamedThing a => a -> D.HSymbol
 toHSymbol = G.getOccString
