@@ -17,9 +17,9 @@ module Djinn.HTypes(
   isHTUnion,
   getHTVars,
   substHT,
-  HClause,
-  HPat,
-  HExpr (HEVar),
+  HClause (..),
+  HPat (..),
+  HExpr (..),
   hPrClause,
   termToHExpr,
   termToHClause,
@@ -208,11 +208,19 @@ hTApp a b = HTApp a b
 data HClause = HClause HSymbol [HPat] HExpr
              deriving (Show, Eq)
 
-data HPat = HPVar HSymbol | HPCon HSymbol | HPTuple [HPat] | HPAt HSymbol HPat | HPApply HPat HPat
+data HPat = HPVar HSymbol
+          | HPCon HSymbol
+          | HPTuple [HPat]
+          | HPAt HSymbol HPat
+          | HPApply HPat HPat
           deriving (Show, Eq)
 
-data HExpr = HELam [HPat] HExpr | HEApply HExpr HExpr | HECon HSymbol | HEVar HSymbol
-           | HETuple [HExpr] | HECase HExpr [(HPat, HExpr)]
+data HExpr = HELam [HPat] HExpr
+           | HEApply HExpr HExpr
+           | HECon HSymbol
+           | HEVar HSymbol
+           | HETuple [HExpr]
+           | HECase HExpr [(HPat, HExpr)]
            deriving (Show, Eq)
 
 hPrClause :: HClause -> String

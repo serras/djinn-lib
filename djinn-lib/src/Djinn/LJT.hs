@@ -21,7 +21,8 @@ module Djinn.LJT (
   module Djinn.LJTFormula,
   provable,
   prove,
-  Proof
+  Proof,
+  MoreSolutions
 ) where
 
 import Control.Applicative (Applicative, Alternative, pure, (<*>), empty, (<|>))

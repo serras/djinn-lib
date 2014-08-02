@@ -1,5 +1,5 @@
 name:           djinn-ghc
-version:        0.0.1
+version:        0.0.1.1
 synopsis:       Generate Haskell code from a type. Bridge from Djinn to GHC API.
 description:    Djinn uses an theorem prover for intuitionistic propositional logic
                 to generate a Haskell expression when given a type.
@@ -18,5 +18,5 @@ library
                     mtl < 2.2,
                     ghc,
                     containers,
-                    djinn-lib == 0.0.1
+                    djinn-lib == 0.0.1.1
   hs-source-dirs:   src
