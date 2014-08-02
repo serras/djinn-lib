@@ -21,6 +21,7 @@ module Djinn.HTypes(
   HPat (..),
   HExpr (..),
   hPrClause,
+  hPrExpr,
   termToHExpr,
   termToHClause,
   getBinderVars
@@ -240,6 +241,9 @@ ppPat _ (HPCon s) = text s
 ppPat _ (HPTuple ps) = parens $ fsep $ punctuate comma (map (ppPat 0) ps)
 ppPat _ (HPAt s p) = text s <> text "@" <> ppPat 10 p
 ppPat p (HPApply a b) = pparens (p > 1) $ ppPat 1 a <+> ppPat 2 b
+
+hPrExpr :: HExpr -> String
+hPrExpr e = renderStyle style $ ppExpr 0 e
 
 ppExpr :: Int -> HExpr -> Doc
 ppExpr p (HELam ps e) = pparens (p > 0) $ sep [ text "\\" <+> sep (map (ppPat 10) ps) <+> text "->",

@@ -81,4 +81,4 @@ djinn multi ty = do
   env <- environment ty
   let form = D.hTypeToFormula env (hType ty)
       prfs = D.prove multi [] form
-  return $ map show prfs
+  return $ map (D.hPrExpr . D.termToHExpr) prfs
