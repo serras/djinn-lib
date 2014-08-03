@@ -19,5 +19,6 @@ library
                     ghc,
                     containers,
                     transformers,
-                    djinn-lib >= 0.0.1.1
+                    djinn-lib >= 0.0.1.1,
+                    async
   hs-source-dirs:   src

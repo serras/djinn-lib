@@ -1,6 +1,8 @@
-{-# LANGUAGE PatternGuards #-}
-module Djinn.GHC (Environment, djinn) where
+{-# LANGUAGE PatternGuards, BangPatterns #-}
+module Djinn.GHC (Environment, MaxSolutions(..), djinn) where
 
+import Control.Concurrent
+import Control.Concurrent.Async
 import Control.Monad (forM)
 import Data.Maybe (isJust)
 import Data.Set (Set, insert, union, unions, empty, toList)
@@ -8,6 +10,7 @@ import Data.Set (Set, insert, union, unions, empty, toList)
 import qualified Djinn.HTypes as D
 import qualified Djinn.LJT as D
 
+import MonadUtils
 import qualified DataCon as G
 import qualified GHC as G
 import qualified Name as G
@@ -87,17 +90,32 @@ toLJTSymbol = D.Symbol . G.getOccString
 -- |Bindings which are in scope at a specific point.
 type Environment = [(G.Name, G.Type)]
 
+-- |Obtain a maximum number of solutions.
+newtype MaxSolutions = Max Int
+
 -- |Obtain the list of expressions which could fill
 -- something with the given type.
 -- The first flag specifies whether to return one
 -- or more solutions to the problem.
-djinn :: G.GhcMonad m => Bool -> Maybe G.ModuleInfo -> Environment -> G.Type -> Maybe Int -> m [String]
-djinn multi minfo env ty mx = do
+djinn :: G.GhcMonad m => Bool -> Maybe G.ModuleInfo -> Environment -> G.Type -> MaxSolutions -> Int -> m [String]
+djinn multi minfo env ty (Max mx) microsec = do
   tyEnv <- environment minfo ty
   let form = D.hTypeToFormula tyEnv (hType ty)
       envF = map (\(n,t) -> (toLJTSymbol n, D.hTypeToFormula tyEnv (hType t))) env
       prfs = D.prove multi envF form
       trms = map (D.hPrExpr . D.termToHExpr) prfs
-  return $ case mx of
-             Nothing -> trms
-             Just mx' -> take mx' trms
+  liftIO $ cropList trms microsec mx
+
+cropList :: [a] -> Int -> Int -> IO [a]
+cropList _   _  0 = return []
+cropList lst ms n = withAsync (let !l = lst in return l) $ \a -> do
+                      threadDelay ms
+                      res <- poll a
+                      case res of
+                        Just r -> case r of
+                          Right (x:xs) -> do ys <- cropList xs ms (n-1)
+                                             return $ x : ys
+                          _            -> return []
+                        Nothing -> do cancel a
+                                      return []
+
