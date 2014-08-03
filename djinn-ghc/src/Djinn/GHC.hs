@@ -2,6 +2,7 @@
 module Djinn.GHC (Environment, djinn) where
 
 import Control.Monad (forM)
+import Data.Maybe (isJust)
 import Data.Set (Set, insert, union, unions, empty, toList)
 
 import qualified Djinn.HTypes as D
@@ -41,12 +42,12 @@ hType t | Just (t1,t2) <- G.splitAppTy_maybe t    = D.HTApp (hType t1) (hType t2
 hType t | Just var <- G.getTyVar_maybe t          = D.HTVar (toHSymbol var)
 hType _                                           = error "Unimplemented"
 
-environment :: G.GhcMonad m => G.Type -> m HEnvironment
-environment = fmap concat . mapM environment1 . toList . getConTs
+environment :: G.GhcMonad m => Maybe G.ModuleInfo -> G.Type -> m HEnvironment
+environment minfo = fmap concat . mapM (environment1 minfo) . toList . getConTs
 
-environment1 :: G.GhcMonad m => G.Name -> m HEnvironment
-environment1 name = do
-  thing <- G.lookupGlobalName name
+environment1 :: G.GhcMonad m => Maybe G.ModuleInfo -> G.Name -> m HEnvironment
+environment1 minfo name = do
+  thing <- lookupNameEverywhere minfo name
   case thing of
     Just (G.ATyCon tycon) | G.isAlgTyCon tycon -> do
       let tyconName = toHSymbol $ G.tyConName tycon
@@ -55,7 +56,7 @@ environment1 name = do
       dtypes <- forM datacons $ \dcon -> do
         let dconN = toHSymbol $ G.dataConName dcon
             (_,_,dconT,_) = G.dataConSig dcon
-        dconE <- mapM environment dconT
+        dconE <- mapM (environment minfo) dconT
         return ((dconN, map hType dconT), dconE)
       let dtypesT = map fst dtypes
           dtypesE = concatMap snd dtypes
@@ -67,9 +68,15 @@ environment1 name = do
           varsH = map toHSymbol vars
           htype = hType defn
       -- Recursively obtain it for the environment of the type
-      defnEnv <- environment defn
+      defnEnv <- environment minfo defn
       return $ (tyconName, (varsH, htype, NoExtraInfo)) : defnEnv
     _ -> return []
+
+lookupNameEverywhere :: G.GhcMonad m => Maybe G.ModuleInfo -> G.Name -> m (Maybe G.TyThing)
+lookupNameEverywhere (Just minfo) name = do
+  thing <- G.modInfoLookupName minfo name
+  if isJust thing then return thing else G.lookupGlobalName name
+lookupNameEverywhere Nothing    name = G.lookupGlobalName name
 
 toHSymbol :: G.NamedThing a => a -> D.HSymbol
 toHSymbol = G.getOccString
@@ -84,10 +91,13 @@ type Environment = [(G.Name, G.Type)]
 -- something with the given type.
 -- The first flag specifies whether to return one
 -- or more solutions to the problem.
-djinn :: G.GhcMonad m => Bool -> Environment -> G.Type -> m [String]
-djinn multi env ty = do
-  tyEnv <- environment ty
+djinn :: G.GhcMonad m => Bool -> Maybe G.ModuleInfo -> Environment -> G.Type -> Maybe Int -> m [String]
+djinn multi minfo env ty mx = do
+  tyEnv <- environment minfo ty
   let form = D.hTypeToFormula tyEnv (hType ty)
       envF = map (\(n,t) -> (toLJTSymbol n, D.hTypeToFormula tyEnv (hType t))) env
       prfs = D.prove multi envF form
-  return $ map (D.hPrExpr . D.termToHExpr) prfs
+      trms = map (D.hPrExpr . D.termToHExpr) prfs
+  return $ case mx of
+             Nothing -> trms
+             Just mx' -> take mx' trms
