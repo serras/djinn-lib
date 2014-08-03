@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards, BangPatterns #-}
+{-# LANGUAGE CPP, PatternGuards, BangPatterns #-}
 module Djinn.GHC (Environment, MaxSolutions(..), djinn) where
 
 import Control.Concurrent
@@ -67,7 +67,11 @@ environment1 minfo name = do
     Just (G.ATyCon tycon) | G.isSynTyCon tycon -> do
       -- Get information for this type synonym
       let tyconName = toHSymbol $ G.tyConName tycon
+#if __GLASGOW_HASKELL__ >= 708
           Just (vars, defn) = G.synTyConDefn_maybe tycon
+#else
+          (vars, defn) = G.synTyConDefn tycon
+#endif
           varsH = map toHSymbol vars
           htype = hType defn
       -- Recursively obtain it for the environment of the type
