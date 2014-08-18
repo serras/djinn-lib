@@ -108,18 +108,24 @@ djinn multi minfo env ty (Max mx) microsec = do
       envF = map (\(n,t) -> (toLJTSymbol n, D.hTypeToFormula tyEnv (hType t))) env
       prfs = D.prove multi envF form
       trms = map (D.hPrExpr . D.termToHExpr) prfs
-  liftIO $ cropList trms microsec mx
+  liftIO $ cropList trms microsec mx (\x -> lengthLessThan x 1000)
 
-cropList :: [a] -> Int -> Int -> IO [a]
-cropList _   _  0 = return []
-cropList lst ms n = withAsync (let !l = lst in return l) $ \a -> do
-                      threadDelay ms
-                      res <- poll a
-                      case res of
-                        Just r -> case r of
-                          Right (x:xs) -> do ys <- cropList xs ms (n-1)
-                                             return $ x : ys
-                          _            -> return []
-                        Nothing -> do cancel a
-                                      return []
+cropList :: [a] -> Int -> Int -> (a -> Bool) -> IO [a]
+cropList _   _  0 _ = return []
+cropList lst ms n chk =
+  withAsync (let !l = lst in return l) $ \a -> do
+    threadDelay ms
+    res <- poll a
+    case res of
+      Just r -> case r of
+        Right (x:xs) -> if chk x then do ys <- cropList xs ms (n-1) chk
+                                         return $ x : ys
+                                 else return []
+        _            -> return []
+      Nothing -> do cancel a
+                    return []
 
+lengthLessThan :: [a] -> Int -> Bool
+lengthLessThan []     _ = True
+lengthLessThan (_:_)  0 = False
+lengthLessThan (x:xs) n = lengthLessThan xs (n-1)
