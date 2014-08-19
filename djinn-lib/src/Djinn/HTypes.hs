@@ -256,7 +256,7 @@ ppExpr _ (HEVar s@(c:_)) | not (isAlphaNum c) = pparens True $ text s
 ppExpr _ (HEVar s) = text s
 ppExpr _ (HETuple es) = parens $ fsep $ punctuate comma (map (ppExpr 0) es)
 ppExpr p (HECase s alts) = pparens (p > 0) $ (text "case" <+> ppExpr 0 s <+> text "of") $$
-                            vcat (map ppAlt alts)
+                            nest 2 (vcat (map ppAlt alts))
   where ppAlt (pp, e) = ppPat 0 pp <+> text "->" <+> ppExpr 0 e
 
 
