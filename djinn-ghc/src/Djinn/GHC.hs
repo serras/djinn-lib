@@ -64,7 +64,11 @@ environment1 minfo name = do
       let dtypesT = map fst dtypes
           dtypesE = concatMap snd dtypes
       return $ (tyconName, (varsH, D.HTUnion dtypesT, NoExtraInfo)) : concat dtypesE
+#if __GLASGOW_HASKELL__ >= 710
+    Just (G.ATyCon tycon) | G.isTypeSynonymTyCon tycon -> do
+#else
     Just (G.ATyCon tycon) | G.isSynTyCon tycon -> do
+#endif
       -- Get information for this type synonym
       let tyconName = toHSymbol $ G.tyConName tycon
 #if __GLASGOW_HASKELL__ >= 708
