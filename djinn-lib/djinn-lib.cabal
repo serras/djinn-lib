@@ -1,6 +1,6 @@
 name:           djinn-lib
 version:        0.0.1.2
-cabal-version:  >= 1.2
+cabal-version:  >= 1.8
 license:        BSD3
 license-file:	LICENSE
 author:	        Lennart Augustsson
