@@ -31,7 +31,7 @@ module Djinn.HTypes(
 import Control.Monad (zipWithM)
 import Data.Char (isAlpha, isAlphaNum, isUpper)
 import Data.List (union, (\\))
-#ifdef MIN_VERSION_base(4,11,0)
+#if MIN_VERSION_base(4,11,0)
 import Prelude hiding ((<>))
 #endif
 import Text.ParserCombinators.ReadP
