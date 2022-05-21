@@ -23,6 +23,12 @@ import Djinn.HTypes
 
 -- import Debug.Trace
 
+#if MIN_VERSION_mtl(2,3,0)
+-- mtl >= 2.3 does not define liftM2
+liftM2 :: Applicative f => (a -> b -> c) -> f a -> f b -> f c
+liftM2 f x y = f <$> x <*> y
+#endif
+
 type KState = (Int, IntMap (Maybe HKind))
 initState :: KState
 initState = (0, empty)
