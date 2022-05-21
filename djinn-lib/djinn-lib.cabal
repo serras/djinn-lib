@@ -1,5 +1,5 @@
 name:           djinn-lib
-version:        0.0.1.3
+version:        0.0.1.4
 cabal-version:  >= 1.10
 license:        BSD3
 license-file:	LICENSE
@@ -14,12 +14,13 @@ homepage:       http://www.augustsson.net/Darcs/Djinn/
 build-type:     Simple
 
 library
-  hs-source-dirs:  src
-  build-depends:   base >= 4.6 && < 5,
-                   mtl,
-                   containers,
-                   pretty
-  exposed-modules: Djinn.HCheck,
-                   Djinn.HTypes,
-                   Djinn.LJT,
-                   Djinn.LJTFormula
+  hs-source-dirs:   src
+  build-depends:    base >= 4.6 && < 5,
+                    mtl,
+                    containers,
+                    pretty
+  exposed-modules:  Djinn.HCheck,
+                    Djinn.HTypes,
+                    Djinn.LJT,
+                    Djinn.LJTFormula
+  default-language: Haskell98
